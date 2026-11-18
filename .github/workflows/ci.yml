@@ -16,7 +16,7 @@ concurrency:
 
 jobs:
   # ─────────────────────────────────────────────────────────────────
-  # Backend: install deps, import every module, run pip-audit.
+  # Backend: install deps, import every module, unit tests, pip-audit.
   # The imports are the real test here - db.py / auth_session.py /
   # gemini_service.py all validate required env vars at import time,
   # so a successful import proves the module tree is intact and the
@@ -64,6 +64,10 @@ jobs:
           python -c "from routes import ai, auth, chat, emails"
           python -c "from services import gemini_service, mcp_service"
           python -c "import db, auth_session"
+
+      - name: Unit tests
+        # tests/conftest.py supplies its own dummy settings.
+        run: python -m pytest -q
 
       - name: Byte-compile every module
         # Catches syntax errors in files the smoke-test doesn't explicitly

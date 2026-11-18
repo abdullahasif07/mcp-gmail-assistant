@@ -16,4 +16,10 @@ pip-audit
 # Optional: ruff doubles as a fast Python linter + formatter + bandit
 # replacement. Enable the `S` ruleset to get bandit-equivalent checks:
 #     ruff check . --select S
-ruff
+# Pinned: ruff's default rule set changes between releases, which would
+# otherwise turn CI red without any code change.
+ruff==0.17.5
+
+# Unit tests (backend/tests). Run with:
+#     pytest
+pytest>=8,<10

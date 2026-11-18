@@ -50,7 +50,8 @@ jobs:
 
       - name: Install ruff
         # No need to install the full requirements.txt just to lint -
-        # ruff is a self-contained binary wheel.
-        run: pip install ruff
+        # ruff is a self-contained binary wheel. Use the version pinned in
+        # requirements-dev.txt so new default rules can't break the build.
+        run: pip install "$(grep -E '^ruff==' requirements-dev.txt)"
 
       - run: ruff check .
