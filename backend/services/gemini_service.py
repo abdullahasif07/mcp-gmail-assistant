@@ -128,7 +128,8 @@ def friendly_gemini_error(exc: BaseException) -> str | None:
             "Gemini rate limit hit. Wait a bit, switch to a paid key, or set "
             "GEMINI_MODEL to a model with a higher quota."
         )
-    if exc.code in (401, 403):
+    # Google answers an invalid key with 400 INVALID_ARGUMENT, not 401.
+    if exc.code in (401, 403) or "api key" in (exc.message or "").lower():
         return "Gemini rejected the API key. Check GEMINI_API_KEY in backend/.env."
     return None
 
