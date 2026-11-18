@@ -1,7 +1,7 @@
 """Gemini-driven chat that can call MCP tools (Gmail) as functions.
 
-Uses the new `google-genai` SDK. Automatic function-calling is disabled so we
-can route tool invocations through the existing MCP stdio client.
+Uses the `google-genai` SDK. Automatic function-calling is disabled so we can
+route tool invocations through the MCP stdio client.
 
 Deferred tools
 --------------
@@ -17,10 +17,12 @@ from dataclasses import dataclass
 from typing import Any
 
 from google import genai
+from google.genai import errors as genai_errors
 from google.genai import types
+from mcp import MCPError
 
 from config import settings
-from services.mcp_service import call_mcp_tool, get_mcp_tools
+from services.mcp_service import MCPSession, MCPToolError, call_mcp_tool, mcp_session
 
 _MODEL = settings.gemini_model
 _client = genai.Client(api_key=settings.gemini_api_key)
@@ -42,8 +44,10 @@ SYSTEM_INSTRUCTION = (
     "  e.g. 'email alice@x.com about lunch tomorrow'): call gmail_send_message\n"
     "  DIRECTLY with to/subject/body. Do NOT call gmail_list_messages or\n"
     "  gmail_read_message first - they are not needed for fresh outbound mail.\n"
-    "- Replying: call gmail_read_message first for context, then call\n"
-    "  gmail_send_message with the same Subject prefixed by 'Re: ' if needed.\n"
+    "- Replying: call gmail_read_message first for context (or gmail_get_thread\n"
+    "  with its Thread id for the whole conversation), then call\n"
+    "  gmail_send_message with replyToMessageId set to the original message id\n"
+    "  and the same Subject prefixed by 'Re: ' if needed.\n"
     "\n"
     "Filling gmail_send_message arguments:\n"
     "- 'to' must be a single email address. If the user gave a name but no\n"
@@ -91,18 +95,47 @@ def _strip_schema_for_gemini(schema: dict[str, Any] | None) -> dict[str, Any]:
     return cleaned
 
 
-async def _build_tools(refresh_token: str) -> list[types.Tool]:
-    listing = await get_mcp_tools(refresh_token)
-    declarations: list[types.FunctionDeclaration] = []
-    for tool in listing.tools:
-        declarations.append(
+# The MCP server's tool list is static, so fetch it once per process instead
+# of on every chat turn.
+_tool_cache: list[types.Tool] | None = None
+
+
+async def _get_tools(session: MCPSession) -> list[types.Tool]:
+    global _tool_cache
+    if _tool_cache is None:
+        listing = await session.list_tools()
+        declarations = [
             types.FunctionDeclaration(
                 name=tool.name,
                 description=tool.description or "",
-                parameters=_strip_schema_for_gemini(tool.inputSchema),
+                parameters=_strip_schema_for_gemini(tool.input_schema),
             )
+            for tool in listing.tools
+        ]
+        _tool_cache = [types.Tool(function_declarations=declarations)]
+    return _tool_cache
+
+
+def friendly_gemini_error(exc: BaseException) -> str | None:
+    """Translate Gemini client errors into a short user-facing message."""
+    if not isinstance(exc, genai_errors.ClientError):
+        return None
+    if exc.code == 429:
+        return (
+            "Gemini rate limit hit. Wait a bit, switch to a paid key, or set "
+            "GEMINI_MODEL to a model with a higher quota."
         )
-    return [types.Tool(function_declarations=declarations)]
+    if exc.code in (401, 403):
+        return "Gemini rejected the API key. Check GEMINI_API_KEY in backend/.env."
+    return None
+
+
+def _function_calls(response: types.GenerateContentResponse) -> list[types.FunctionCall]:
+    if not response.candidates:
+        return []
+    content = response.candidates[0].content
+    parts = (content.parts if content else None) or []
+    return [p.function_call for p in parts if p.function_call]
 
 
 def _deferred_response(tool_name: str, args: dict) -> str:
@@ -120,47 +153,52 @@ def _deferred_response(tool_name: str, args: dict) -> str:
 
 async def chat_once(message: str, refresh_token: str) -> ChatResult:
     """Single-shot chat turn. Returns the model reply plus an optional
-    pending action that the frontend must confirm before we actually run it."""
-    tools = await _build_tools(refresh_token)
-    config = types.GenerateContentConfig(
-        system_instruction=SYSTEM_INSTRUCTION,
-        tools=tools,
-        automatic_function_calling=types.AutomaticFunctionCallingConfig(
-            disable=True
-        ),
-    )
-    chat = _client.aio.chats.create(model=_MODEL, config=config)
+    pending action that the frontend must confirm before we actually run it.
 
-    response = await chat.send_message(message)
-    pending: dict | None = None
+    One MCP server process is kept alive for the whole turn so multiple tool
+    calls don't each pay the Node start-up cost."""
+    async with mcp_session(refresh_token) as session:
+        config = types.GenerateContentConfig(
+            system_instruction=SYSTEM_INSTRUCTION,
+            tools=await _get_tools(session),
+            automatic_function_calling=types.AutomaticFunctionCallingConfig(
+                disable=True
+            ),
+        )
+        chat = _client.aio.chats.create(model=_MODEL, config=config)
 
-    for _ in range(_MAX_TOOL_ROUNDS):
-        parts = response.candidates[0].content.parts or []
-        calls = [p.function_call for p in parts if getattr(p, "function_call", None)]
-        if not calls:
-            break
+        response = await chat.send_message(message)
+        pending: dict | None = None
 
-        tool_responses: list[types.Part] = []
-        for call in calls:
-            args = dict(call.args) if call.args else {}
-            if call.name in DEFERRED_TOOLS:
-                pending = {"tool": call.name, "args": args}
-                result_text = _deferred_response(call.name, args)
-            else:
-                try:
-                    result_text = await call_mcp_tool(call.name, args, refresh_token)
-                except Exception as exc:
-                    result_text = f"Error running {call.name}: {exc}"
-            tool_responses.append(
-                types.Part.from_function_response(
-                    name=call.name,
-                    response={"result": result_text},
+        for _ in range(_MAX_TOOL_ROUNDS):
+            calls = _function_calls(response)
+            if not calls:
+                break
+
+            tool_responses: list[types.Part] = []
+            for call in calls:
+                name = call.name or ""
+                args = dict(call.args) if call.args else {}
+                if name in DEFERRED_TOOLS:
+                    pending = {"tool": name, "args": args}
+                    result_text = _deferred_response(name, args)
+                else:
+                    try:
+                        result_text = await session.call_tool(name, args)
+                    except (MCPToolError, MCPError) as exc:
+                        # Feed the failure back so the model can recover
+                        # (e.g. bad message id) instead of failing the turn.
+                        result_text = f"Error running {name}: {exc}"
+                tool_responses.append(
+                    types.Part.from_function_response(
+                        name=name,
+                        response={"result": result_text},
+                    )
                 )
-            )
 
-        response = await chat.send_message(tool_responses)
+            response = await chat.send_message(tool_responses)
 
-    text = getattr(response, "text", None) or (
+    text = response.text or (
         "I prepared the requested actions but didn't produce a text summary."
     )
     return ChatResult(reply=text, pending_action=pending)
@@ -195,4 +233,4 @@ async def suggest_reply(email_text: str, instruction: str | None = None) -> str:
         model=_MODEL,
         contents=prompt,
     )
-    return (getattr(response, "text", None) or "").strip()
+    return (response.text or "").strip()
