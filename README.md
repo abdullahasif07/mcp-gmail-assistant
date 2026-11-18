@@ -1,9 +1,16 @@
 # Mailmind — Gmail assistant over MCP
 
-Mailmind is a small Gmail client with an AI assistant built in. You sign in
-with Google, read and reply to mail in a Gmail-style inbox, ask Gemini to
-draft replies, and use a chat bar for requests like *"show unread from Stripe"*
-or *"email sam@example.com that I'll be late"*.
+Mailmind is a small Gmail client with an AI assistant built in. You read and
+reply to mail in a Gmail-style inbox, ask Gemini to draft replies, and use a
+chat bar for requests like *"show unread from Marcus"* or *"email
+sam@example.com that I'll be late"*.
+
+The landing page offers two ways in:
+
+- **Demo inbox (for recruiters).** A sandboxed dummy account with fictional
+  emails. No Google sign-in needed. Every feature works, and "sent" mail only
+  lands in that visitor's own Sent folder. It can be gated with an access code.
+- **Your own Gmail.** Real access through Google OAuth.
 
 All Gmail access goes through a **Model Context Protocol (MCP) server**, so the
 same Gmail tools the UI uses are the ones the model calls.
@@ -29,6 +36,13 @@ same Gmail tools the UI uses are the ones the model calls.
   - For each request, starts the MCP server with **that user's** token.
 - **`mcp-server/`**: a stdio MCP server exposing four Gmail tools (list,
   read, send, get thread). It works on its own with any MCP client too.
+
+In demo mode the backend swaps the MCP server for `DemoMailbox`
+(`backend/services/demo_mailbox.py`). It implements the same four tools with
+identical output, including Gmail-style search (`from:`, `is:unread`,
+`label:`, `newer_than:7d`, quoted phrases, `-negation`), on a per-visitor
+in-memory copy of the seed data. Routes and the AI tool loop don't know which
+mode they're in.
 
 Sending email from chat always takes two steps. When Gemini calls
 `gmail_send_message`, the backend doesn't send. It returns the draft as a
@@ -78,7 +92,9 @@ lives on the `mailmind-data` volume.
 | ------ | ------------------- | ------------------------------------------- |
 | GET    | `/auth/login`       | Redirect to Google consent                  |
 | GET    | `/auth/callback`    | OAuth callback; sets session cookie         |
-| GET    | `/auth/me`          | Connected account, or 401                   |
+| GET    | `/auth/demo`        | Is demo mode on, and does it need a code?   |
+| POST   | `/auth/demo`        | Start a demo session (`{accessCode}`)       |
+| GET    | `/auth/me`          | Current account and mode, or 401           |
 | POST   | `/auth/logout`      | Forget the stored token, clear cookie       |
 | GET    | `/emails?query=`    | List messages for a Gmail search query      |
 | GET    | `/emails/{id}`      | Full message                                |
@@ -103,7 +119,13 @@ cd mcp-server && node --check index.js
 CI (`.github/workflows/`) runs all of the above on every push and pull
 request, plus a secret scan. A weekly job runs dependency audits.
 
-## Security notes
+## Security notes and cost controls
+
+- `DEMO_ACCESS_CODE` gates the demo, with 10 attempts per IP per 10 minutes.
+- `AI_DAILY_LIMIT` caps AI requests app-wide per day, and
+  `DEMO_SESSION_AI_LIMIT` caps each demo visitor. Over the limit, the API
+  returns a friendly 429. Counters are in memory and reset on restart, so also
+  set a hard spending limit with your AI provider.
 
 - Refresh tokens are encrypted at rest. Rotating `TOKEN_ENCRYPTION_KEY`
   disconnects everyone, and rotating `SESSION_JWT_SECRET` logs everyone out.
