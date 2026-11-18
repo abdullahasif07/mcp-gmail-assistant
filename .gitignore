@@ -66,5 +66,3 @@ coverage/
 *.db-shm
 
 Makefile
-
-.env.example

@@ -1,14 +1,15 @@
-fastapi
-uvicorn
-python-dotenv
-pydantic-settings
-google-genai
-google-auth
-google-auth-oauthlib
-google-auth-httplib2
-google-api-python-client
-mcp
-httpx
-email-validator
-pyjwt
-cryptography
+# Runtime dependencies. Ranges are pinned to the current major version so a
+# fresh `pip install` (Docker build, Render deploy, CI) can't silently pull in
+# a breaking release - mcp 2.0 renamed fields we rely on, for example.
+fastapi>=0.115,<1
+uvicorn>=0.30,<1
+pydantic>=2.7,<3
+pydantic-settings>=2.4,<3
+email-validator>=2.1,<3
+google-genai>=1.0,<4
+google-auth>=2.30,<3
+google-auth-oauthlib>=1.2,<2
+mcp>=2.0,<3
+httpx>=0.27,<1
+pyjwt>=2.8,<3
+cryptography>=43
