@@ -32,15 +32,14 @@ const API_KEY = process.env.NEXT_PUBLIC_API_KEY ?? "";
 
 export type Email = {
   id: string;
+  threadId?: string | null;
   from: string;
   subject: string;
   date: string;
-  snippet?: string;
 };
 
 export type EmailDetail = Email & {
   body: string;
-  threadId?: string;
 };
 
 export class ApiError extends Error {
@@ -51,10 +50,25 @@ export class ApiError extends Error {
   }
 }
 
-async function request<T>(
-  path: string,
-  init?: RequestInit & { expectText?: boolean }
-): Promise<T> {
+// FastAPI errors look like {"detail": "..."} (or a list of validation
+// errors). Pull out something human-readable instead of showing raw JSON.
+function errorMessage(text: string, fallback: string): string {
+  try {
+    const { detail } = JSON.parse(text) as { detail?: unknown };
+    if (typeof detail === "string") return detail;
+    if (Array.isArray(detail)) {
+      return detail
+        .map((d: { msg?: string }) => d?.msg)
+        .filter(Boolean)
+        .join("; ");
+    }
+  } catch {
+    // Not JSON - fall through to the raw text.
+  }
+  return text || fallback;
+}
+
+async function request<T>(path: string, init?: RequestInit): Promise<T> {
   const res = await fetch(`${API_BASE}${path}`, {
     ...init,
     // Send the mm_session HttpOnly cookie on every request. Required for
@@ -68,10 +82,7 @@ async function request<T>(
   });
   if (!res.ok) {
     const text = await res.text().catch(() => "");
-    throw new ApiError(res.status, text || res.statusText);
-  }
-  if (init?.expectText) {
-    return (await res.text()) as unknown as T;
+    throw new ApiError(res.status, errorMessage(text, res.statusText));
   }
   return (await res.json()) as T;
 }
@@ -105,8 +116,8 @@ export async function sendEmail(payload: {
   subject: string;
   body: string;
   inReplyTo?: string;
-}): Promise<{ ok: true }> {
-  return request<{ ok: true }>(`/emails/send`, {
+}): Promise<{ ok: boolean; detail: string }> {
+  return request<{ ok: boolean; detail: string }>(`/emails/send`, {
     method: "POST",
     body: JSON.stringify(payload),
   });

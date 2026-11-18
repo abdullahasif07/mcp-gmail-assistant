@@ -16,14 +16,12 @@ import {
   type Me,
   type PendingAction,
 } from "@/lib/api";
-import Sidebar from "@/components/Sidebar";
+import Sidebar, { type Filter } from "@/components/Sidebar";
 import EmailDetail from "@/components/EmailDetail";
 import ReplyPanel, { type ReplyDraft } from "@/components/ReplyPanel";
 import ChatBar from "@/components/ChatBar";
 import AccountBadge from "@/components/AccountBadge";
 import ConnectGate from "@/components/ConnectGate";
-
-type Filter = "unread" | "inbox" | "sent";
 
 const FILTER_QUERY: Record<Filter, string> = {
   unread: "is:unread",
@@ -35,8 +33,7 @@ const EMPTY_DRAFT: ReplyDraft = { to: "", subject: "", body: "" };
 
 function toErrorMessage(e: unknown): string {
   if (e instanceof ApiError) {
-    if (e.status === 404) return "Backend endpoint not available yet.";
-    return `${e.status}: ${e.message || "Request failed"}`;
+    return e.message || `Request failed (${e.status})`;
   }
   if (e instanceof TypeError) {
     return "Can't reach backend. Is FastAPI running on :8001?";
@@ -78,9 +75,11 @@ export default function InboxPage() {
     try {
       const data = await listEmails(FILTER_QUERY[filter], 20);
       setEmails(data);
-      if (data.length > 0 && !data.some((e) => e.id === selectedId)) {
-        setSelectedId(data[0].id);
-      }
+      // Keep the current selection if it's still in the list, otherwise
+      // select the newest message.
+      setSelectedId((prev) =>
+        prev && data.some((e) => e.id === prev) ? prev : data[0]?.id ?? null
+      );
     } catch (e) {
       // Session expired / revoked mid-session → fall back to the gate.
       if (e instanceof ApiError && e.status === 401) {
@@ -91,7 +90,7 @@ export default function InboxPage() {
     } finally {
       setListLoading(false);
     }
-  }, [filter, selectedId]);
+  }, [filter]);
 
   // One-shot session check on mount. We keep this independent from the
   // email list effect so the gate shows immediately without a 401 flash.
@@ -115,8 +114,7 @@ export default function InboxPage() {
     // set-state-in-effect rule is overly strict here.
     // eslint-disable-next-line react-hooks/set-state-in-effect
     refresh();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [filter, me]);
+  }, [refresh, me]);
 
   useEffect(() => {
     if (!selectedId) {
@@ -125,11 +123,8 @@ export default function InboxPage() {
       return;
     }
     let cancelled = false;
-     
     setDetailLoading(true);
-     
     setDetailError(null);
-     
     setDetail(null);
     getEmail(selectedId)
       .then((d) => {
@@ -229,25 +224,15 @@ export default function InboxPage() {
     }
   }
 
-  async function runChat(message: string): Promise<ChatResult | null> {
-    try {
-      return await sendChatMessage(message);
-    } catch (e) {
-      if (e instanceof ApiError && e.status === 404) return null;
-      throw e;
-    }
+  function runChat(message: string): Promise<ChatResult> {
+    return sendChatMessage(message);
   }
 
-  async function runConfirm(action: PendingAction): Promise<string | null> {
-    try {
-      const { reply } = await confirmChatAction(action);
-      // Gmail may have changed; refresh in the background.
-      refresh();
-      return reply;
-    } catch (e) {
-      if (e instanceof ApiError && e.status === 404) return null;
-      throw e;
-    }
+  async function runConfirm(action: PendingAction): Promise<string> {
+    const { reply } = await confirmChatAction(action);
+    // Gmail may have changed; refresh in the background.
+    refresh();
+    return reply;
   }
 
   if (me === null) {

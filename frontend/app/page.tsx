@@ -1,5 +1,5 @@
 import Link from "next/link";
-import { Inbox, Sparkles, Send, ShieldCheck } from "lucide-react";
+import { AlertCircle, Inbox, Sparkles, Send, ShieldCheck } from "lucide-react";
 import { AUTH_LOGIN_URL } from "@/lib/api";
 
 const features = [
@@ -20,10 +20,35 @@ const features = [
   },
 ];
 
-export default function Landing() {
+// Codes the backend sends back via /?auth_error=... when sign-in fails.
+const AUTH_ERRORS: Record<string, string> = {
+  access_denied: "Google sign-in was cancelled. Connect again whenever you're ready.",
+  invalid_state: "The sign-in link expired or was tampered with. Please try again.",
+};
+
+export default async function Landing({
+  searchParams,
+}: {
+  searchParams: Promise<{ [key: string]: string | string[] | undefined }>;
+}) {
+  const { auth_error } = await searchParams;
+  const authError =
+    typeof auth_error === "string"
+      ? AUTH_ERRORS[auth_error] ?? `Google sign-in failed (${auth_error}). Please try again.`
+      : null;
+
   return (
     <main className="flex flex-1 w-full flex-col items-center justify-center px-6 py-16">
       <div className="w-full max-w-5xl">
+        {authError && (
+          <div
+            role="alert"
+            className="mx-auto mb-8 flex max-w-xl items-start gap-2 rounded-xl border border-[var(--border)] bg-[var(--surface-muted)] p-3 text-sm"
+          >
+            <AlertCircle className="h-4 w-4 shrink-0 translate-y-0.5 text-[var(--danger)]" />
+            <span>{authError}</span>
+          </div>
+        )}
         <div className="flex flex-col items-center text-center gap-6">
           <span className="inline-flex items-center gap-2 rounded-full border border-[var(--border)] bg-[var(--surface-muted)] px-3 py-1 text-xs text-[var(--muted)]">
             <ShieldCheck className="h-3.5 w-3.5" />

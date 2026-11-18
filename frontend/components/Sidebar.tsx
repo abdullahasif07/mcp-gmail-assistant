@@ -3,8 +3,9 @@
 import { useMemo, type ReactNode } from "react";
 import { Inbox, Mail, MailOpen, RefreshCw, Search, AlertTriangle } from "lucide-react";
 import type { Email } from "@/lib/api";
+import { displayName, initials } from "@/lib/format";
 
-type Filter = "unread" | "inbox" | "sent";
+export type Filter = "unread" | "inbox" | "sent";
 
 type Props = {
   emails: Email[];
@@ -30,18 +31,6 @@ const FILTERS: { id: Filter; label: string; icon: typeof Mail }[] = [
   { id: "inbox", label: "Inbox", icon: Inbox },
   { id: "sent", label: "Sent", icon: MailOpen },
 ];
-
-function initials(name: string): string {
-  const trimmed = name.replace(/<.*?>/, "").trim();
-  const parts = trimmed.split(/\s+/).filter(Boolean);
-  if (parts.length === 0) return "?";
-  return (parts[0][0] + (parts[1]?.[0] ?? "")).toUpperCase();
-}
-
-function displayName(from: string): string {
-  const m = from.match(/^(.*?)\s*<.*?>$/);
-  return (m?.[1] || from).replace(/"/g, "").trim() || from;
-}
 
 function formatDate(date: string): string {
   if (!date) return "";
@@ -201,11 +190,6 @@ export default function Sidebar({
                       <div className="mt-0.5 truncate text-sm text-[var(--foreground)]">
                         {e.subject}
                       </div>
-                      {e.snippet && (
-                        <div className="mt-0.5 truncate text-xs text-[var(--muted)]">
-                          {e.snippet}
-                        </div>
-                      )}
                     </div>
                   </div>
                 </button>

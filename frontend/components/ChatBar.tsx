@@ -5,8 +5,8 @@ import { CheckCircle2, Loader2, Send, Sparkles, X } from "lucide-react";
 import type { ChatResult, PendingAction } from "@/lib/api";
 
 type Props = {
-  onSend: (message: string) => Promise<ChatResult | null>;
-  onConfirm: (action: PendingAction) => Promise<string | null>;
+  onSend: (message: string) => Promise<ChatResult>;
+  onConfirm: (action: PendingAction) => Promise<string>;
 };
 
 function summariseArgs(args: Record<string, unknown>): {
@@ -38,10 +38,6 @@ export default function ChatBar({ onSend, onConfirm }: Props) {
     setPending(null);
     try {
       const res = await onSend(msg);
-      if (res === null) {
-        setError("Chat endpoint not available yet.");
-        return;
-      }
       setReply(res.reply);
       setPending(res.pendingAction ?? null);
       setValue("");
@@ -58,12 +54,8 @@ export default function ChatBar({ onSend, onConfirm }: Props) {
     setError(null);
     try {
       const text = await onConfirm(pending);
-      if (text === null) {
-        setError("Confirm endpoint not available yet.");
-      } else {
-        setReply(text);
-        setPending(null);
-      }
+      setReply(text);
+      setPending(null);
     } catch (e) {
       setError((e as Error).message || "Confirm failed");
     } finally {
@@ -157,7 +149,7 @@ export default function ChatBar({ onSend, onConfirm }: Props) {
           onChange={(e) => setValue(e.target.value)}
           onKeyDown={onKeyDown}
           disabled={loading}
-          placeholder="Ask anything — e.g. “show unread from Stripe” or “reply politely I&apos;ll respond tomorrow”"
+          placeholder="Ask anything — e.g. “show unread from Stripe” or “email sam@example.com that I’ll be late”"
           className="flex-1 bg-transparent text-sm outline-none placeholder:text-[var(--muted)] disabled:opacity-70"
         />
         <button

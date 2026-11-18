@@ -2,6 +2,7 @@
 
 import { Inbox, Loader2, Reply, Sparkles, AlertCircle } from "lucide-react";
 import type { Email, EmailDetail as EmailDetailType } from "@/lib/api";
+import { displayName, senderEmail } from "@/lib/format";
 
 type Props = {
   summary: Email | null;
@@ -12,20 +13,6 @@ type Props = {
   onReply: () => void;
   onSuggest: () => void;
 };
-
-function displayName(from: string): string {
-  const m = from.match(/^(.*?)\s*<(.*?)>$/);
-  if (m) {
-    const name = m[1].replace(/"/g, "").trim();
-    return name || m[2];
-  }
-  return from;
-}
-
-function senderEmail(from: string): string {
-  const m = from.match(/<(.*?)>/);
-  return m?.[1] ?? from;
-}
 
 export default function EmailDetail({
   summary,
@@ -114,8 +101,7 @@ export default function EmailDetail({
                 {error}
               </div>
               <div className="mt-2 text-[var(--muted)]">
-                Showing header info only. Add a <code className="font-mono">GET /emails/:id</code>{" "}
-                endpoint on the backend to fetch the body.
+                Showing header info only.
               </div>
             </div>
           </div>
