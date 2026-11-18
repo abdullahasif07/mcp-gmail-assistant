@@ -16,6 +16,7 @@ from __future__ import annotations
 from pathlib import Path
 from typing import Literal
 
+from pydantic import Field
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 _THIS_DIR = Path(__file__).resolve().parent
@@ -56,7 +57,9 @@ class Settings(BaseSettings):
     api_key: str = ""
 
     # ── Sessions / encryption ───────────────────────────────────────────
-    session_jwt_secret: str
+    # HS256 needs a key at least as long as its 32-byte output to be safe.
+    session_jwt_secret: str = Field(min_length=32)
+    # Fernet key: `python -c "from cryptography.fernet import Fernet; print(Fernet.generate_key().decode())"`
     token_encryption_key: str
 
     # ── SQLite ──────────────────────────────────────────────────────────
