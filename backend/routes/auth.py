@@ -19,6 +19,7 @@ from auth_session import (
 from config import settings
 from db import delete_user, get_email, upsert_user
 from schemas.auth import DemoInfo, DemoStartRequest, MeResponse
+from services.chat_memory import chat_memory
 from services.demo_mailbox import demo_store
 from services.demo_seed import DEMO_ADDRESS
 from services.usage import demo_code_attempts
@@ -190,5 +191,6 @@ def logout(response: Response, session: Session = Depends(current_session)):
         demo_store.discard(session.id)
     else:
         delete_user(session.id)
+    chat_memory.clear(f"{session.mode}:{session.id}")
     clear_session_cookie(response)
     return {"ok": True}

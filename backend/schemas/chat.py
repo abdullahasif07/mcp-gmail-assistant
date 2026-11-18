@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from typing import Any
+from typing import Any, Literal
 
 from pydantic import BaseModel, Field
 
@@ -22,6 +22,18 @@ class PendingAction(BaseModel):
 
 class ChatResponse(BaseModel):
     reply: str
+    pendingAction: PendingAction | None = None
+    # True when the user confirmed a draft in chat and it was sent this turn.
+    sent: bool = False
+
+
+class ChatMessage(BaseModel):
+    role: Literal["user", "assistant"]
+    text: str
+
+
+class ChatHistoryResponse(BaseModel):
+    messages: list[ChatMessage]
     pendingAction: PendingAction | None = None
 
 

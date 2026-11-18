@@ -161,3 +161,31 @@ def test_ai_budget_caps(monkeypatch):
     resp = client.post("/chat", json={"message": "hi"})
     assert resp.status_code == 429
     assert "daily AI budget" in resp.json()["detail"]
+
+
+def test_chat_history_endpoints():
+    client = demo_client()
+    assert client.get("/chat/history").json() == {"messages": [], "pendingAction": None}
+    client.post("/chat/confirm", json={
+        "tool": "gmail_send_message",
+        "args": {"to": "x@y.example", "subject": "s", "body": "b"},
+    })
+    msgs = client.get("/chat/history").json()["messages"]
+    assert msgs[-1]["role"] == "assistant" and "saved to Sent" in msgs[-1]["text"]
+    assert client.delete("/chat/history").json() == {"ok": True}
+    assert client.get("/chat/history").json()["messages"] == []
+
+
+def test_discard_forgets_pending_draft():
+    from routes.chat import conversation_key
+    from services.chat_memory import chat_memory
+
+    client = demo_client()
+    session_id = client.get("/auth/me").json()["userId"]
+    conv = chat_memory.get(conversation_key(type("S", (), {"mode": "demo", "id": session_id})()))
+    conv.pending = {"tool": "gmail_send_message", "args": {"to": "a@b.example"}}
+    assert client.get("/chat/history").json()["pendingAction"] is not None
+    client.post("/chat/discard")
+    body = client.get("/chat/history").json()
+    assert body["pendingAction"] is None
+    assert body["messages"][-1]["text"] == "Draft discarded."
