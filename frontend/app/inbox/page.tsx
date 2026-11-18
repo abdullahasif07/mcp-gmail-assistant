@@ -22,6 +22,7 @@ import ReplyPanel, { type ReplyDraft } from "@/components/ReplyPanel";
 import ChatBar from "@/components/ChatBar";
 import AccountBadge from "@/components/AccountBadge";
 import ConnectGate from "@/components/ConnectGate";
+import { FlaskConical } from "lucide-react";
 
 const FILTER_QUERY: Record<Filter, string> = {
   unread: "is:unread",
@@ -205,13 +206,13 @@ export default function InboxPage() {
     setSendError(null);
     setSendSuccess(null);
     try {
-      await sendEmail({
+      const res = await sendEmail({
         to: draft.to,
         subject: draft.subject,
         body: draft.body,
         inReplyTo: draft.inReplyTo,
       });
-      setSendSuccess("Message sent.");
+      setSendSuccess(res.detail || "Message sent.");
       setTimeout(() => {
         setPanelOpen(false);
         setDraft(EMPTY_DRAFT);
@@ -246,6 +247,15 @@ export default function InboxPage() {
 
   return (
     <div className="flex h-[100dvh] w-full flex-col">
+      {me.mode === "demo" && (
+        <div className="flex items-center justify-center gap-2 border-b border-[var(--border)] bg-[var(--surface-muted)] px-4 py-1.5 text-center text-xs text-[var(--muted)]">
+          <FlaskConical className="h-3.5 w-3.5 shrink-0 text-[var(--accent)]" />
+          <span>
+            <span className="font-medium text-[var(--foreground)]">Demo mode</span>
+            {" "}· Dummy inbox with fictional emails. Nothing you send is actually delivered.
+          </span>
+        </div>
+      )}
       <div className="relative flex flex-1 min-h-0 overflow-hidden">
         <Sidebar
           emails={emails}

@@ -35,10 +35,10 @@ export default function AccountBadge({ me, onAfterLogout }: Props) {
       <button
         onClick={handleLogout}
         className="inline-flex h-7 items-center justify-center gap-1 rounded-md px-2 text-xs text-[var(--muted)] transition hover:bg-[var(--surface-muted)] hover:text-[var(--foreground)]"
-        aria-label="Log out"
+        aria-label={me.mode === "demo" ? "Exit demo" : "Log out"}
       >
         <LogOut className="h-3.5 w-3.5" />
-        Log out
+        {me.mode === "demo" ? "Exit demo" : "Log out"}
       </button>
     </div>
   );

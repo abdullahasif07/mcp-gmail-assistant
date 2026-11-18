@@ -1,6 +1,6 @@
 import Link from "next/link";
 import { AlertCircle, Inbox, Sparkles, Send, ShieldCheck } from "lucide-react";
-import { AUTH_LOGIN_URL } from "@/lib/api";
+import SignInOptions from "@/components/SignInOptions";
 
 const features = [
   {
@@ -61,23 +61,14 @@ export default async function Landing({
             Mailmind connects to Gmail through a local Model Context Protocol
             server and uses Gemini to read, summarise and reply to your email.
           </p>
-          <div className="flex flex-wrap items-center justify-center gap-3 pt-2">
-            <Link
-              href="/inbox"
-              className="btn-accent inline-flex h-11 items-center justify-center rounded-full px-6 text-sm font-medium"
-            >
-              Open inbox
-            </Link>
-            <a
-              href={AUTH_LOGIN_URL}
-              className="inline-flex h-11 items-center justify-center rounded-full border border-[var(--border-strong)] px-6 text-sm font-medium transition hover:bg-[var(--surface-muted)]"
-            >
-              Sign in with Google
-            </a>
+          <div className="w-full max-w-3xl pt-4">
+            <SignInOptions />
           </div>
           <p className="text-xs text-[var(--muted)]">
-            First run? Click <span className="font-medium">Sign in with Google</span> once to
-            grant access; afterwards just open the inbox.
+            Already signed in or in a demo?{" "}
+            <Link href="/inbox" className="font-medium text-[var(--foreground)] underline-offset-4 hover:underline">
+              Open the inbox
+            </Link>
           </p>
         </div>
 

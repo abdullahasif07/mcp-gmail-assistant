@@ -5,6 +5,8 @@
  *   GET  /auth/login           -> redirects to Google consent screen
  *   GET  /auth/callback        -> OAuth callback; sets session cookie and
  *                                 redirects back to FRONTEND_BASE_URL
+ *   GET  /auth/demo            -> is demo mode on / does it need a code?
+ *   POST /auth/demo            -> start a sandboxed demo with a fake inbox
  *   GET  /auth/me              -> returns the connected account or 401
  *   POST /auth/logout          -> revokes the session and clears the cookie
  *   GET  /emails?query=...     -> list emails matching a Gmail query
@@ -16,9 +18,9 @@
  *
  * All requests send the `mm_session` HttpOnly cookie via
  * `credentials: "include"`; the backend uses it to pick the caller's
- * Gmail refresh token on every call. If you see a 401 from a protected
- * endpoint, the user hasn't connected Gmail yet — send them to
- * AUTH_LOGIN_URL.
+ * mailbox (real Gmail or the demo sandbox) on every call. A 401 from a
+ * protected endpoint means the visitor hasn't signed in or started the
+ * demo yet.
  */
 
 export const API_BASE =
@@ -151,7 +153,20 @@ export async function confirmChatAction(
 
 export const AUTH_LOGIN_URL = `${API_BASE}/auth/login`;
 
-export type Me = { userId: string; email: string };
+export type Me = { userId: string; email: string; mode: "gmail" | "demo" };
+
+export type DemoInfo = { enabled: boolean; accessCodeRequired: boolean };
+
+export async function getDemoInfo(): Promise<DemoInfo> {
+  return request<DemoInfo>(`/auth/demo`);
+}
+
+export async function startDemo(accessCode?: string): Promise<void> {
+  await request<{ ok: true }>(`/auth/demo`, {
+    method: "POST",
+    body: JSON.stringify(accessCode ? { accessCode } : {}),
+  });
+}
 
 export async function getMe(): Promise<Me | null> {
   try {
