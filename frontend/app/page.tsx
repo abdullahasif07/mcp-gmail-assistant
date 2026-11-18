@@ -11,7 +11,7 @@ const features = [
   {
     icon: Sparkles,
     title: "AI suggested replies",
-    body: "Gemini drafts a contextual reply you can edit in one click.",
+    body: "The AI drafts a contextual reply you can edit in one click.",
   },
   {
     icon: Send,
@@ -52,14 +52,14 @@ export default async function Landing({
         <div className="flex flex-col items-center text-center gap-6">
           <span className="inline-flex items-center gap-2 rounded-full border border-[var(--border)] bg-[var(--surface-muted)] px-3 py-1 text-xs text-[var(--muted)]">
             <ShieldCheck className="h-3.5 w-3.5" />
-            OAuth-secured · Gemini · MCP
+            OAuth-secured · OpenAI · MCP
           </span>
           <h1 className="text-4xl sm:text-5xl font-semibold tracking-tight leading-tight">
             Your inbox, with an assistant.
           </h1>
           <p className="max-w-xl text-base sm:text-lg text-[var(--muted)]">
             Mailmind connects to Gmail through a local Model Context Protocol
-            server and uses Gemini to read, summarise and reply to your email.
+            server and uses OpenAI to read, summarise and reply to your email.
           </p>
           <div className="w-full max-w-3xl pt-4">
             <SignInOptions />

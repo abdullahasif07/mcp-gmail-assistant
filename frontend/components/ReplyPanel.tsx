@@ -133,7 +133,7 @@ export default function ReplyPanel({
             className="inline-flex h-9 items-center gap-2 rounded-full border border-[var(--border-strong)] px-4 text-sm font-medium transition hover:bg-[var(--surface-muted)] disabled:opacity-50"
             title={
               draft.inReplyTo
-                ? "Ask Gemini to draft a reply"
+                ? "Ask the AI to draft a reply"
                 : "AI replies are only available when replying to an email"
             }
           >

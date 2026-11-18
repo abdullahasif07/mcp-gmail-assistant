@@ -15,7 +15,7 @@ const geistMono = Geist_Mono({
 export const metadata: Metadata = {
   title: "Mailmind — Gmail AI Assistant",
   description:
-    "A minimal Gmail assistant powered by Gemini and the Model Context Protocol.",
+    "A minimal Gmail assistant powered by OpenAI and the Model Context Protocol.",
 };
 
 export default function RootLayout({

@@ -1,7 +1,7 @@
 # Mailmind — Gmail assistant over MCP
 
 Mailmind is a small Gmail client with an AI assistant built in. You read and
-reply to mail in a Gmail-style inbox, ask Gemini to draft replies, and use a
+reply to mail in a Gmail-style inbox, ask the AI (OpenAI) to draft replies, and use a
 chat bar for requests like *"show unread from Marcus"* or *"email
 sam@example.com that I'll be late"*.
 
@@ -21,7 +21,7 @@ same Gmail tools the UI uses are the ones the model calls.
  Browser (Next.js)                 FastAPI backend                    Node MCP server
 ┌────────────────┐  cookie +   ┌──────────────────────┐   stdio    ┌──────────────────┐
 │ /inbox UI      │ ─────────▶ │ /emails  /ai  /chat  │ ─────────▶ │ gmail_list_...   │ ──▶ Gmail API
-│ chat bar       │  JSON       │ Gemini tool loop     │  per user  │ gmail_read_...   │
+│ chat bar       │  JSON       │ OpenAI tool loop     │  per user  │ gmail_read_...   │
 └────────────────┘             │ SQLite (encrypted    │            │ gmail_send_...   │
                                │ refresh tokens)      │            │ gmail_get_thread │
                                └──────────────────────┘            └──────────────────┘
@@ -44,14 +44,14 @@ identical output, including Gmail-style search (`from:`, `is:unread`,
 in-memory copy of the seed data. Routes and the AI tool loop don't know which
 mode they're in.
 
-Sending email from chat always takes two steps. When Gemini calls
+Sending email from chat always takes two steps. When the model calls
 `gmail_send_message`, the backend doesn't send. It returns the draft as a
 `pendingAction`, and the email goes out only after the user clicks
 **Confirm & send** (`POST /chat/confirm`).
 
 ## Running locally
 
-Prerequisites: Python 3.12+, Node 20+, a Gemini API key, and a Google Cloud
+Prerequisites: Python 3.12+, Node 20+, an OpenAI API key, and a Google Cloud
 OAuth **Web** client with the Gmail API enabled and
 `http://localhost:8001/auth/callback` as an authorized redirect URI.
 
@@ -99,7 +99,7 @@ lives on the `mailmind-data` volume.
 | GET    | `/emails?query=`    | List messages for a Gmail search query      |
 | GET    | `/emails/{id}`      | Full message                                |
 | POST   | `/emails/send`      | Send; `inReplyTo` keeps the reply threaded  |
-| POST   | `/ai/suggest-reply` | Gemini reply draft for a message            |
+| POST   | `/ai/suggest-reply` | AI reply draft for a message                |
 | POST   | `/chat`             | Natural-language assistant over MCP tools   |
 | POST   | `/chat/confirm`     | Execute a send the assistant prepared       |
 
@@ -125,7 +125,7 @@ request, plus a secret scan. A weekly job runs dependency audits.
 - `AI_DAILY_LIMIT` caps AI requests app-wide per day, and
   `DEMO_SESSION_AI_LIMIT` caps each demo visitor. Over the limit, the API
   returns a friendly 429. Counters are in memory and reset on restart, so also
-  set a hard spending limit with your AI provider.
+  set a monthly budget limit in the OpenAI dashboard.
 
 - Refresh tokens are encrypted at rest. Rotating `TOKEN_ENCRYPTION_KEY`
   disconnects everyone, and rotating `SESSION_JWT_SECRET` logs everyone out.
