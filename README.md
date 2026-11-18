@@ -10,7 +10,9 @@ The landing page offers two ways in:
 - **Demo inbox (for recruiters).** A sandboxed dummy account with fictional
   emails. No Google sign-in needed. Every feature works, and "sent" mail only
   lands in that visitor's own Sent folder. It can be gated with an access code.
-- **Your own Gmail.** Real access through Google OAuth.
+- **Your own Gmail.** Real access through Google OAuth. Shown only when Google
+  credentials are configured (and `GMAIL_ENABLED` isn't `false`), so a
+  demo-only deployment needs no Google setup at all.
 
 All Gmail access goes through a **Model Context Protocol (MCP) server**, so the
 same Gmail tools the UI uses are the ones the model calls.
@@ -51,9 +53,14 @@ Sending email from chat always takes two steps. When the model calls
 
 ## Running locally
 
-Prerequisites: Python 3.12+, Node 20+, an OpenAI API key, and a Google Cloud
-OAuth **Web** client with the Gmail API enabled and
-`http://localhost:8001/auth/callback` as an authorized redirect URI.
+Prerequisites: Python 3.12+, Node 20+ and an OpenAI API key. That's enough
+for the demo inbox.
+
+For "Use your own Gmail" you also need a Google Cloud OAuth **Web** client
+with the Gmail API enabled and `http://localhost:8001/auth/callback` as an
+authorized redirect URI. While the Google app is in testing mode, only
+accounts listed as **test users** can sign in, and their access expires
+after 7 days.
 
 Quick start with `make`:
 
@@ -104,7 +111,7 @@ lives on the `mailmind-data` volume.
 | ------ | ------------------- | ------------------------------------------- |
 | GET    | `/auth/login`       | Redirect to Google consent                  |
 | GET    | `/auth/callback`    | OAuth callback; sets session cookie         |
-| GET    | `/auth/demo`        | Is demo mode on, and does it need a code?   |
+| GET    | `/auth/options`     | Which sign-in options are available         |
 | POST   | `/auth/demo`        | Start a demo session (`{accessCode}`)       |
 | GET    | `/auth/me`          | Current account and mode, or 401           |
 | POST   | `/auth/logout`      | Forget the stored token, clear cookie       |
