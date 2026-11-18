@@ -55,6 +55,18 @@ Prerequisites: Python 3.12+, Node 20+, an OpenAI API key, and a Google Cloud
 OAuth **Web** client with the Gmail API enabled and
 `http://localhost:8001/auth/callback` as an authorized redirect URI.
 
+Quick start with `make`:
+
+```bash
+make setup    # once: venv + all deps, creates backend/.env with generated secrets
+# put your OPENAI_API_KEY in backend/.env
+make run      # backend :8001 + frontend :3000 together; Ctrl+C stops both
+```
+
+`make help` lists the other targets (`backend`, `frontend`, `test`, `lint`).
+
+Or step by step:
+
 ```bash
 # 1. MCP server deps (the backend spawns it)
 cd mcp-server && npm install && cd ..
