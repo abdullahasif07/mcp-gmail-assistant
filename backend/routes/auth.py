@@ -18,7 +18,7 @@ from auth_session import (
 )
 from config import settings
 from db import delete_user, get_email, upsert_user
-from schemas.auth import DemoInfo, DemoStartRequest, MeResponse
+from schemas.auth import AuthOptions, DemoStartRequest, MeResponse
 from services.chat_memory import chat_memory
 from services.demo_mailbox import demo_store
 from services.demo_seed import DEMO_ADDRESS
@@ -60,6 +60,8 @@ def _flow() -> Flow:
 
 @router.get("/login")
 def login():
+    if not settings.gmail_available:
+        return _frontend_redirect("/", auth_error="gmail_disabled")
     flow = _flow()
     auth_url, state = flow.authorization_url(
         access_type="offline",
@@ -96,6 +98,9 @@ async def callback(
     error: str | None = None,
     mm_oauth_state: str | None = Cookie(default=None),
 ):
+    if not settings.gmail_available:
+        return _frontend_redirect("/", auth_error="gmail_disabled")
+
     # User clicked "Cancel" on Google's consent screen (or Google refused).
     if error:
         return _frontend_redirect("/", auth_error=error)
@@ -143,12 +148,13 @@ async def callback(
     return resp
 
 
-@router.get("/demo", response_model=DemoInfo)
-def demo_info() -> DemoInfo:
-    """Lets the landing page know whether to ask for an access code."""
-    return DemoInfo(
-        enabled=settings.demo_enabled,
-        accessCodeRequired=bool(settings.demo_access_code),
+@router.get("/options", response_model=AuthOptions)
+def auth_options() -> AuthOptions:
+    """Lets the landing page show only the sign-in options that work."""
+    return AuthOptions(
+        demo=settings.demo_enabled,
+        demoAccessCodeRequired=bool(settings.demo_access_code),
+        gmail=settings.gmail_available,
     )
 
 
@@ -179,6 +185,8 @@ def start_demo(req: DemoStartRequest, request: Request, response: Response):
 def me(session: Session = Depends(current_session)) -> MeResponse:
     if session.is_demo:
         return MeResponse(userId=session.id, email=DEMO_ADDRESS, mode="demo")
+    if not settings.gmail_available:
+        raise HTTPException(status_code=401, detail="Gmail sign-in is disabled")
     email = get_email(session.id)
     if not email:
         raise HTTPException(status_code=401, detail="Gmail connection missing")

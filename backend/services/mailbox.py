@@ -20,6 +20,7 @@ from typing import Any, Protocol
 from fastapi import Depends, HTTPException
 
 from auth_session import Session, current_session
+from config import settings
 from db import get_refresh_token
 from services.demo_mailbox import demo_store
 from services.mcp_service import mcp_session
@@ -51,6 +52,8 @@ def current_mailbox(session: Session = Depends(current_session)) -> Mailbox:
     """FastAPI dependency: the caller's mailbox (demo or real Gmail)."""
     if session.is_demo:
         return demo_store.get(session.id)
+    if not settings.gmail_available:
+        raise HTTPException(status_code=401, detail="Gmail sign-in is disabled")
     token = get_refresh_token(session.id)
     if not token:
         # Row gone (logged out elsewhere, or the Fernet key was rotated).

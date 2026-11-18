@@ -43,10 +43,15 @@ class Settings(BaseSettings):
     # a public demo cheap.
     openai_model: str = "gpt-5-mini"
 
-    # ── Google OAuth ────────────────────────────────────────────────────
-    google_client_id: str
-    google_client_secret: str
-    google_redirect_uri: str
+    # ── Google OAuth (optional) ─────────────────────────────────────────
+    # Leave empty (or as the .env.example placeholders) to run demo-only:
+    # the "Use your own Gmail" option is then hidden.
+    google_client_id: str = ""
+    google_client_secret: str = ""
+    google_redirect_uri: str = "http://localhost:8001/auth/callback"
+    # Hide Gmail sign-in even when Google is configured (e.g. a public,
+    # demo-only deployment).
+    gmail_enabled: bool = True
 
     # ── URLs / CORS ─────────────────────────────────────────────────────
     frontend_base_url: str = "http://localhost:3000"
@@ -84,6 +89,19 @@ class Settings(BaseSettings):
     @property
     def is_prod(self) -> bool:
         return self.env == "prod"
+
+    @property
+    def google_configured(self) -> bool:
+        def real(value: str) -> bool:
+            v = value.strip().lower()
+            return bool(v) and not v.startswith("your_") and "placeholder" not in v
+
+        return real(self.google_client_id) and real(self.google_client_secret)
+
+    @property
+    def gmail_available(self) -> bool:
+        """Whether the real-Gmail sign-in option is offered."""
+        return self.gmail_enabled and self.google_configured
 
     @property
     def cors_origins(self) -> list[str]:

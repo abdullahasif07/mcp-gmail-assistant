@@ -13,9 +13,12 @@ class MeResponse(BaseModel):
     mode: Literal["gmail", "demo"]
 
 
-class DemoInfo(BaseModel):
-    enabled: bool
-    accessCodeRequired: bool
+class AuthOptions(BaseModel):
+    """Which ways into the app the landing page should offer."""
+
+    demo: bool
+    demoAccessCodeRequired: bool
+    gmail: bool
 
 
 class DemoStartRequest(BaseModel):

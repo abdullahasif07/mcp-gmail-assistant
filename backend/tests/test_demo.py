@@ -134,7 +134,7 @@ def test_demo_access_code(monkeypatch):
     monkeypatch.setattr(settings, "demo_access_code", "letmein")
     monkeypatch.setattr(auth_routes, "demo_code_attempts", usage.SlidingWindowLimiter(3, 600))
     client = TestClient(main.app)
-    assert client.get("/auth/demo").json() == {"enabled": True, "accessCodeRequired": True}
+    assert client.get("/auth/options").json()["demoAccessCodeRequired"] is True
     assert client.post("/auth/demo", json={}).status_code == 403
     assert client.post("/auth/demo", json={"accessCode": "wrông"}).status_code == 403
     assert client.post("/auth/demo", json={"accessCode": "letmein"}).status_code == 200
