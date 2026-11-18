@@ -1,6 +1,5 @@
 "use client";
 
-import { ShieldCheck } from "lucide-react";
 import SignInOptions from "@/components/SignInOptions";
 
 export default function ConnectGate() {
@@ -11,16 +10,11 @@ export default function ConnectGate() {
           Choose how to explore Mailmind
         </h1>
         <p className="mt-2 text-sm text-[var(--muted)]">
-          Jump into the demo inbox, or connect your own Gmail account.
+          Pick how you&apos;d like to get in.
         </p>
         <div className="mt-8">
           <SignInOptions />
         </div>
-        <p className="mt-6 inline-flex items-center gap-1.5 text-[11px] text-[var(--muted)]">
-          <ShieldCheck className="h-3 w-3" />
-          Gmail access uses Google OAuth. We never see your password, and your
-          token is stored encrypted.
-        </p>
       </div>
     </main>
   );

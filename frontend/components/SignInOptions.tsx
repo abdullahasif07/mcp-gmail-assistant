@@ -6,29 +6,32 @@ import { FlaskConical, KeyRound, Loader2, Mail } from "lucide-react";
 import {
   ApiError,
   AUTH_LOGIN_URL,
-  getDemoInfo,
+  getAuthOptions,
   startDemo,
-  type DemoInfo,
+  type AuthOptions,
 } from "@/lib/api";
 
 /**
  * The two ways into the app:
  *   1. Recruiter demo — a sandboxed, pre-seeded fake inbox. No Google account.
  *   2. Real Gmail    — Google OAuth (limited to approved test users while the
- *                      Google Cloud app is in testing mode).
+ *                      Google Cloud app is in testing mode). Only shown when
+ *                      the backend has Google configured.
  */
 export default function SignInOptions() {
   const router = useRouter();
-  const [info, setInfo] = useState<DemoInfo | null>(null);
+  const [options, setOptions] = useState<AuthOptions | null>(null);
   const [code, setCode] = useState("");
   const [starting, setStarting] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
-    getDemoInfo()
-      .then(setInfo)
-      // Backend unreachable: keep the button; the click will surface the error.
-      .catch(() => setInfo({ enabled: true, accessCodeRequired: false }));
+    getAuthOptions()
+      .then(setOptions)
+      // Backend unreachable: show the demo button; the click surfaces the error.
+      .catch(() =>
+        setOptions({ demo: true, demoAccessCodeRequired: false, gmail: false })
+      );
   }, []);
 
   async function onStartDemo(e: FormEvent) {
@@ -48,11 +51,27 @@ export default function SignInOptions() {
     }
   }
 
-  const demoEnabled = info?.enabled ?? true;
-  const needsCode = info?.accessCodeRequired ?? false;
+  // Until options load, show only the demo card so the Gmail card never
+  // flashes in on deployments where it's disabled.
+  const demoEnabled = options?.demo ?? true;
+  const gmailEnabled = options?.gmail ?? false;
+  const needsCode = options?.demoAccessCodeRequired ?? false;
+  const both = demoEnabled && gmailEnabled;
+
+  if (options && !demoEnabled && !gmailEnabled) {
+    return (
+      <p className="text-sm text-[var(--muted)]">
+        Sign-in is currently unavailable. Please check back later.
+      </p>
+    );
+  }
 
   return (
-    <div className="grid w-full gap-4 text-left sm:grid-cols-2">
+    <div
+      className={`mx-auto grid w-full gap-4 text-left ${
+        both ? "sm:grid-cols-2" : "max-w-md"
+      }`}
+    >
       {demoEnabled && (
         <form
           onSubmit={onStartDemo}
@@ -103,25 +122,23 @@ export default function SignInOptions() {
         </form>
       )}
 
-      <div
-        className={`flex flex-col rounded-2xl border border-[var(--border)] bg-[var(--surface)] p-6 ${
-          demoEnabled ? "" : "sm:col-span-2"
-        }`}
-      >
-        <Mail className="h-5 w-5 text-[var(--accent)]" />
-        <h2 className="mt-4 text-base font-semibold">Use your own Gmail</h2>
-        <p className="mt-1.5 flex-1 text-sm leading-relaxed text-[var(--muted)]">
-          Connect a real Gmail account with Google OAuth to read, search and
-          reply to your actual mail. While the app is in Google&apos;s testing
-          mode, only approved accounts can sign in.
-        </p>
-        <a
-          href={AUTH_LOGIN_URL}
-          className="mt-4 inline-flex h-10 items-center justify-center rounded-full border border-[var(--border-strong)] text-sm font-medium transition hover:bg-[var(--surface-muted)]"
-        >
-          Sign in with Google
-        </a>
-      </div>
+      {gmailEnabled && (
+        <div className="flex flex-col rounded-2xl border border-[var(--border)] bg-[var(--surface)] p-6">
+          <Mail className="h-5 w-5 text-[var(--accent)]" />
+          <h2 className="mt-4 text-base font-semibold">Use your own Gmail</h2>
+          <p className="mt-1.5 flex-1 text-sm leading-relaxed text-[var(--muted)]">
+            Connect a real Gmail account with Google OAuth to read, search and
+            reply to your actual mail. While the app is in Google&apos;s testing
+            mode, only approved accounts can sign in.
+          </p>
+          <a
+            href={AUTH_LOGIN_URL}
+            className="mt-4 inline-flex h-10 items-center justify-center rounded-full border border-[var(--border-strong)] text-sm font-medium transition hover:bg-[var(--surface-muted)]"
+          >
+            Sign in with Google
+          </a>
+        </div>
+      )}
     </div>
   );
 }

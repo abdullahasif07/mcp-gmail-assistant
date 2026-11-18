@@ -5,7 +5,7 @@
  *   GET  /auth/login           -> redirects to Google consent screen
  *   GET  /auth/callback        -> OAuth callback; sets session cookie and
  *                                 redirects back to FRONTEND_BASE_URL
- *   GET  /auth/demo            -> is demo mode on / does it need a code?
+ *   GET  /auth/options         -> which sign-in options are available
  *   POST /auth/demo            -> start a sandboxed demo with a fake inbox
  *   GET  /auth/me              -> returns the connected account or 401
  *   POST /auth/logout          -> revokes the session and clears the cookie
@@ -177,10 +177,15 @@ export const AUTH_LOGIN_URL = `${API_BASE}/auth/login`;
 
 export type Me = { userId: string; email: string; mode: "gmail" | "demo" };
 
-export type DemoInfo = { enabled: boolean; accessCodeRequired: boolean };
+export type AuthOptions = {
+  demo: boolean;
+  demoAccessCodeRequired: boolean;
+  /** False when Google OAuth isn't configured or GMAIL_ENABLED=false. */
+  gmail: boolean;
+};
 
-export async function getDemoInfo(): Promise<DemoInfo> {
-  return request<DemoInfo>(`/auth/demo`);
+export async function getAuthOptions(): Promise<AuthOptions> {
+  return request<AuthOptions>(`/auth/options`);
 }
 
 export async function startDemo(accessCode?: string): Promise<void> {

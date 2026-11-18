@@ -24,6 +24,7 @@ const features = [
 const AUTH_ERRORS: Record<string, string> = {
   access_denied: "Google sign-in was cancelled. Connect again whenever you're ready.",
   invalid_state: "The sign-in link expired or was tampered with. Please try again.",
+  gmail_disabled: "Gmail sign-in isn't available on this site. Try the demo inbox instead.",
 };
 
 export default async function Landing({
