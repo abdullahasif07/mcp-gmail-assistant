@@ -2,15 +2,15 @@
 
 from __future__ import annotations
 
-from pydantic import BaseModel, EmailStr, Field
+from pydantic import BaseModel, ConfigDict, EmailStr, Field
 
 
 class SendEmailRequest(BaseModel):
     to: EmailStr
     subject: str = Field(..., min_length=1, max_length=998)
     body: str = Field(..., min_length=1)
-    # Accepted for forward-compat with threaded replies; the MCP send tool
-    # currently creates a new thread regardless.
+    # Gmail message id being replied to. When set, the message is sent into
+    # the same thread with proper In-Reply-To / References headers.
     inReplyTo: str | None = None
 
 
@@ -23,9 +23,19 @@ class EmailSummary(BaseModel):
     """One row in the inbox list. `from` is reserved in Python, so the
     field is named `sender` and aliased back to `from` on the wire."""
 
+    model_config = ConfigDict(populate_by_name=True)
+
     id: str
+    threadId: str | None = None
     sender: str = Field(..., alias="from")
     subject: str
     date: str
 
-    model_config = {"populate_by_name": True}
+
+class EmailListResponse(BaseModel):
+    query: str
+    emails: list[EmailSummary]
+
+
+class EmailDetail(EmailSummary):
+    body: str
