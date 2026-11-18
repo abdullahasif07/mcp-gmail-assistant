@@ -4,19 +4,24 @@ import hmac
 from urllib.parse import urlencode
 
 import httpx
-from fastapi import APIRouter, Cookie, Depends, HTTPException, Response
+from fastapi import APIRouter, Cookie, Depends, HTTPException, Request, Response
 from fastapi.concurrency import run_in_threadpool
 from fastapi.responses import RedirectResponse
 from google_auth_oauthlib.flow import Flow
 from oauthlib.oauth2.rfc6749.errors import OAuth2Error
 
 from auth_session import (
+    Session,
     clear_session_cookie,
-    current_user_id,
+    current_session,
     issue_session_cookie,
 )
 from config import settings
 from db import delete_user, get_email, upsert_user
+from schemas.auth import DemoInfo, DemoStartRequest, MeResponse
+from services.demo_mailbox import demo_store
+from services.demo_seed import DEMO_ADDRESS
+from services.usage import demo_code_attempts
 
 router = APIRouter()
 
@@ -137,13 +142,53 @@ async def callback(
     return resp
 
 
-@router.get("/me")
-def me(user_id: str = Depends(current_user_id)):
-    return {"userId": user_id, "email": get_email(user_id)}
+@router.get("/demo", response_model=DemoInfo)
+def demo_info() -> DemoInfo:
+    """Lets the landing page know whether to ask for an access code."""
+    return DemoInfo(
+        enabled=settings.demo_enabled,
+        accessCodeRequired=bool(settings.demo_access_code),
+    )
+
+
+@router.post("/demo")
+def start_demo(req: DemoStartRequest, request: Request, response: Response):
+    """Start a sandboxed recruiter demo with a pre-seeded fake inbox."""
+    if not settings.demo_enabled:
+        raise HTTPException(status_code=404, detail="Demo mode is disabled")
+
+    expected = settings.demo_access_code
+    if expected:
+        client_ip = request.client.host if request.client else "unknown"
+        if not demo_code_attempts.allow(client_ip):
+            raise HTTPException(
+                status_code=429, detail="Too many attempts. Try again in a few minutes."
+            )
+        provided = (req.accessCode or "").strip()
+        # Compare bytes: compare_digest rejects non-ASCII str input.
+        if not hmac.compare_digest(provided.encode(), expected.encode()):
+            raise HTTPException(status_code=403, detail="Incorrect access code")
+
+    session_id = demo_store.create()
+    issue_session_cookie(response, session_id, mode="demo")
+    return {"ok": True}
+
+
+@router.get("/me", response_model=MeResponse)
+def me(session: Session = Depends(current_session)) -> MeResponse:
+    if session.is_demo:
+        return MeResponse(userId=session.id, email=DEMO_ADDRESS, mode="demo")
+    email = get_email(session.id)
+    if not email:
+        raise HTTPException(status_code=401, detail="Gmail connection missing")
+    return MeResponse(userId=session.id, email=email, mode="gmail")
 
 
 @router.post("/logout")
-def logout(response: Response, user_id: str = Depends(current_user_id)):
-    delete_user(user_id)
+def logout(response: Response, session: Session = Depends(current_session)):
+    if session.is_demo:
+        demo_store.discard(session.id)
+    else:
+        delete_user(session.id)
     clear_session_cookie(response)
     return {"ok": True}

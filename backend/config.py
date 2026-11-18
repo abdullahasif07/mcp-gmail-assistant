@@ -62,6 +62,19 @@ class Settings(BaseSettings):
     # Fernet key: `python -c "from cryptography.fernet import Fernet; print(Fernet.generate_key().decode())"`
     token_encryption_key: str
 
+    # ── Recruiter demo mode ─────────────────────────────────────────────
+    # A sandboxed, pre-seeded fake inbox (no Gmail account involved).
+    demo_enabled: bool = True
+    # If set, visitors must enter this code to start the demo.
+    demo_access_code: str = ""
+
+    # ── AI cost guards ──────────────────────────────────────────────────
+    # Max AI requests (chat messages + reply suggestions) per UTC day across
+    # the whole app. 0 disables the cap.
+    ai_daily_limit: int = 300
+    # Max AI requests per demo session.
+    demo_session_ai_limit: int = 30
+
     # ── SQLite ──────────────────────────────────────────────────────────
     db_path: str = "./mailmind.db"
 

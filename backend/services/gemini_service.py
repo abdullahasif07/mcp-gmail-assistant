@@ -22,7 +22,8 @@ from google.genai import types
 from mcp import MCPError
 
 from config import settings
-from services.mcp_service import MCPSession, MCPToolError, call_mcp_tool, mcp_session
+from services.mailbox import Mailbox, call_tool
+from services.mcp_service import MCPToolError, get_mcp_tools
 
 _MODEL = settings.gemini_model
 _client = genai.Client(api_key=settings.gemini_api_key)
@@ -96,14 +97,16 @@ def _strip_schema_for_gemini(schema: dict[str, Any] | None) -> dict[str, Any]:
 
 
 # The MCP server's tool list is static, so fetch it once per process instead
-# of on every chat turn.
+# of on every chat turn. The Node server is the single source of truth for
+# tool schemas - demo mode implements the same tools, so it reuses them.
 _tool_cache: list[types.Tool] | None = None
 
 
-async def _get_tools(session: MCPSession) -> list[types.Tool]:
+async def _get_tools() -> list[types.Tool]:
     global _tool_cache
     if _tool_cache is None:
-        listing = await session.list_tools()
+        # Listing tools never touches Gmail, so no refresh token is needed.
+        listing = await get_mcp_tools(refresh_token="")
         declarations = [
             types.FunctionDeclaration(
                 name=tool.name,
@@ -151,16 +154,17 @@ def _deferred_response(tool_name: str, args: dict) -> str:
     )
 
 
-async def chat_once(message: str, refresh_token: str) -> ChatResult:
+async def chat_once(message: str, mailbox: Mailbox) -> ChatResult:
     """Single-shot chat turn. Returns the model reply plus an optional
     pending action that the frontend must confirm before we actually run it.
 
-    One MCP server process is kept alive for the whole turn so multiple tool
-    calls don't each pay the Node start-up cost."""
-    async with mcp_session(refresh_token) as session:
+    One mailbox session (for Gmail: one MCP server process) is kept open for
+    the whole turn so multiple tool calls don't each pay the start-up cost."""
+    tools = await _get_tools()
+    async with mailbox.session() as session:
         config = types.GenerateContentConfig(
             system_instruction=SYSTEM_INSTRUCTION,
-            tools=await _get_tools(session),
+            tools=tools,
             automatic_function_calling=types.AutomaticFunctionCallingConfig(
                 disable=True
             ),
@@ -204,13 +208,13 @@ async def chat_once(message: str, refresh_token: str) -> ChatResult:
     return ChatResult(reply=text, pending_action=pending)
 
 
-async def execute_pending(pending: dict, refresh_token: str) -> str:
+async def execute_pending(pending: dict, mailbox: Mailbox) -> str:
     """Run a previously-deferred tool call after the user has confirmed it."""
     tool = pending.get("tool")
     args = pending.get("args") or {}
     if tool not in DEFERRED_TOOLS:
         raise ValueError(f"{tool!r} is not a deferred tool")
-    return await call_mcp_tool(tool, args, refresh_token)
+    return await call_tool(mailbox, tool, args)
 
 
 async def suggest_reply(email_text: str, instruction: str | None = None) -> str:

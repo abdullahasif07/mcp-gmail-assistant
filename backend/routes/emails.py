@@ -1,6 +1,5 @@
 from fastapi import APIRouter, Depends, Query
 
-from auth_session import current_refresh_token
 from schemas.emails import (
     EmailDetail,
     EmailListResponse,
@@ -8,7 +7,7 @@ from schemas.emails import (
     SendEmailRequest,
     SendEmailResponse,
 )
-from services.mcp_service import call_mcp_tool
+from services.mailbox import Mailbox, call_tool, current_mailbox
 
 router = APIRouter()
 
@@ -102,12 +101,10 @@ def _parse_read_message(blob: str, message_id: str) -> EmailDetail:
 async def list_emails(
     query: str = Query("is:unread", description="Gmail search query, e.g. is:unread, in:inbox, in:sent"),
     maxResults: int = Query(15, ge=1, le=50),
-    refresh_token: str = Depends(current_refresh_token),
+    mailbox: Mailbox = Depends(current_mailbox),
 ) -> EmailListResponse:
-    text = await call_mcp_tool(
-        "gmail_list_messages",
-        {"query": query, "maxResults": maxResults},
-        refresh_token,
+    text = await call_tool(
+        mailbox, "gmail_list_messages", {"query": query, "maxResults": maxResults}
     )
     return EmailListResponse(query=query, emails=_parse_list_blob(text))
 
@@ -115,12 +112,12 @@ async def list_emails(
 @router.post("/send", response_model=SendEmailResponse)
 async def send_email(
     req: SendEmailRequest,
-    refresh_token: str = Depends(current_refresh_token),
+    mailbox: Mailbox = Depends(current_mailbox),
 ) -> SendEmailResponse:
     args = {"to": req.to, "subject": req.subject, "body": req.body}
     if req.inReplyTo:
         args["replyToMessageId"] = req.inReplyTo
-    text = await call_mcp_tool("gmail_send_message", args, refresh_token)
+    text = await call_tool(mailbox, "gmail_send_message", args)
     return SendEmailResponse(detail=text)
 
 
@@ -128,7 +125,7 @@ async def send_email(
 @router.get("/{message_id}", response_model=EmailDetail)
 async def read_email(
     message_id: str,
-    refresh_token: str = Depends(current_refresh_token),
+    mailbox: Mailbox = Depends(current_mailbox),
 ) -> EmailDetail:
-    text = await call_mcp_tool("gmail_read_message", {"messageId": message_id}, refresh_token)
+    text = await call_tool(mailbox, "gmail_read_message", {"messageId": message_id})
     return _parse_read_message(text, message_id)
