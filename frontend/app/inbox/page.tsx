@@ -316,7 +316,7 @@ export default function InboxPage() {
           />
         </main>
       </div>
-      <ChatBar onSend={runChat} onConfirm={runConfirm} />
+      <ChatBar onSend={runChat} onConfirm={runConfirm} onMailChanged={refresh} />
     </div>
   );
 }

@@ -15,6 +15,9 @@
  *   POST /ai/suggest-reply     -> AI-generated reply draft for an email
  *   POST /chat                 -> natural language assistant over MCP tools
  *   POST /chat/confirm         -> execute a deferred tool call (e.g. send)
+ *   POST /chat/discard         -> forget the draft awaiting confirmation
+ *   GET  /chat/history         -> recent conversation (restores the panel)
+ *   DELETE /chat/history       -> start a new chat
  *
  * All requests send the `mm_session` HttpOnly cookie via
  * `credentials: "include"`; the backend uses it to pick the caller's
@@ -133,7 +136,26 @@ export type PendingAction = {
 export type ChatResult = {
   reply: string;
   pendingAction?: PendingAction | null;
+  /** True when the user confirmed a draft in chat and it was sent. */
+  sent?: boolean;
 };
+
+export type ChatMessage = { role: "user" | "assistant"; text: string };
+
+export async function getChatHistory(): Promise<{
+  messages: ChatMessage[];
+  pendingAction: PendingAction | null;
+}> {
+  return request(`/chat/history`);
+}
+
+export async function clearChatHistory(): Promise<void> {
+  await request<{ ok: true }>(`/chat/history`, { method: "DELETE" });
+}
+
+export async function discardChatDraft(): Promise<void> {
+  await request<{ ok: true }>(`/chat/discard`, { method: "POST" });
+}
 
 export async function sendChatMessage(message: string): Promise<ChatResult> {
   return request<ChatResult>(`/chat`, {
