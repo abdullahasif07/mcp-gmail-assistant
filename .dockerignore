@@ -18,6 +18,7 @@
 **/.coverage
 **/htmlcov
 backend/.venv
+backend/tests
 
 # Node
 **/node_modules
