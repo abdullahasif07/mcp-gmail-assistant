@@ -1,7 +1,8 @@
-"""Gemini-driven chat that can call MCP tools (Gmail) as functions.
+"""OpenAI-driven chat that can call MCP tools (Gmail) as functions.
 
-Uses the `google-genai` SDK. Automatic function-calling is disabled so we can
-route tool invocations through the MCP stdio client.
+Uses the Chat Completions API with function tools. We run the tool loop
+ourselves so every call is routed through the caller's mailbox (real Gmail
+via the MCP stdio server, or the demo sandbox).
 
 Deferred tools
 --------------
@@ -13,20 +14,21 @@ send. This avoids silent outbound mail from a chat prompt.
 
 from __future__ import annotations
 
+import json
 from dataclasses import dataclass
 from typing import Any
 
-from google import genai
-from google.genai import errors as genai_errors
-from google.genai import types
+import openai
 from mcp import MCPError
+from openai.types.chat import ChatCompletionMessageParam, ChatCompletionToolParam
 
 from config import settings
 from services.mailbox import Mailbox, call_tool
 from services.mcp_service import MCPToolError, get_mcp_tools
 
-_MODEL = settings.gemini_model
-_client = genai.Client(api_key=settings.gemini_api_key)
+_MODEL = settings.openai_model
+# The SDK retries transient failures (429/5xx/timeouts) with backoff itself.
+_client = openai.AsyncOpenAI(api_key=settings.openai_api_key, max_retries=2, timeout=60)
 
 # Tools that MUST NOT fire without explicit user confirmation.
 DEFERRED_TOOLS: set[str] = {"gmail_send_message"}
@@ -76,21 +78,14 @@ class ChatResult:
     pending_action: dict | None = None  # {"tool": str, "args": dict}
 
 
-def _strip_schema_for_gemini(schema: dict[str, Any] | None) -> dict[str, Any]:
-    """Gemini accepts OpenAPI-style JSON schema but rejects a few keys that
-    MCP tools sometimes emit (`$schema`, `additionalProperties`, etc)."""
+def _clean_schema(schema: dict[str, Any] | None) -> dict[str, Any]:
+    """Turn an MCP tool's JSON schema into OpenAI function `parameters`.
+
+    OpenAI accepts standard JSON schema; we only drop the `$schema` marker
+    and make sure the top level is an object."""
     if not schema:
         return {"type": "object", "properties": {}}
-    drop = {"$schema", "additionalProperties", "title", "default"}
-
-    def clean(node: Any) -> Any:
-        if isinstance(node, dict):
-            return {k: clean(v) for k, v in node.items() if k not in drop}
-        if isinstance(node, list):
-            return [clean(v) for v in node]
-        return node
-
-    cleaned = clean(schema)
+    cleaned = {k: v for k, v in schema.items() if k != "$schema"}
     cleaned.setdefault("type", "object")
     cleaned.setdefault("properties", {})
     return cleaned
@@ -99,53 +94,46 @@ def _strip_schema_for_gemini(schema: dict[str, Any] | None) -> dict[str, Any]:
 # The MCP server's tool list is static, so fetch it once per process instead
 # of on every chat turn. The Node server is the single source of truth for
 # tool schemas - demo mode implements the same tools, so it reuses them.
-_tool_cache: list[types.Tool] | None = None
+_tool_cache: list[ChatCompletionToolParam] | None = None
 
 
-async def _get_tools() -> list[types.Tool]:
+async def _get_tools() -> list[ChatCompletionToolParam]:
     global _tool_cache
     if _tool_cache is None:
         # Listing tools never touches Gmail, so no refresh token is needed.
         listing = await get_mcp_tools(refresh_token="")
-        declarations = [
-            types.FunctionDeclaration(
-                name=tool.name,
-                description=tool.description or "",
-                parameters=_strip_schema_for_gemini(tool.input_schema),
-            )
+        _tool_cache = [
+            {
+                "type": "function",
+                "function": {
+                    "name": tool.name,
+                    "description": tool.description or "",
+                    "parameters": _clean_schema(tool.input_schema),
+                },
+            }
             for tool in listing.tools
         ]
-        _tool_cache = [types.Tool(function_declarations=declarations)]
     return _tool_cache
 
 
-def friendly_gemini_error(exc: BaseException) -> str | None:
-    """Translate Gemini client errors into a short user-facing message."""
-    if not isinstance(exc, genai_errors.ClientError):
-        return None
-    if exc.code == 429:
-        return (
-            "Gemini rate limit hit. Wait a bit, switch to a paid key, or set "
-            "GEMINI_MODEL to a model with a higher quota."
-        )
-    # Google answers an invalid key with 400 INVALID_ARGUMENT, not 401.
-    if exc.code in (401, 403) or "api key" in (exc.message or "").lower():
-        return "Gemini rejected the API key. Check GEMINI_API_KEY in backend/.env."
+def friendly_ai_error(exc: BaseException) -> str | None:
+    """Translate OpenAI errors into a short user-facing message."""
+    if isinstance(exc, openai.RateLimitError):
+        # OpenAI also uses 429 for "out of credits".
+        if getattr(exc, "code", None) == "insufficient_quota":
+            return "The AI provider account is out of credits. Please try again later."
+        return "The AI provider is rate limiting requests. Wait a moment and try again."
+    if isinstance(exc, (openai.AuthenticationError, openai.PermissionDeniedError)):
+        return "OpenAI rejected the API key. Check OPENAI_API_KEY in backend/.env."
+    if isinstance(exc, (openai.APIConnectionError, openai.APITimeoutError)):
+        return "Couldn't reach the AI provider. Please try again shortly."
     return None
 
 
-def _function_calls(response: types.GenerateContentResponse) -> list[types.FunctionCall]:
-    if not response.candidates:
-        return []
-    content = response.candidates[0].content
-    parts = (content.parts if content else None) or []
-    return [p.function_call for p in parts if p.function_call]
-
-
 def _deferred_response(tool_name: str, args: dict) -> str:
-    """Synthetic tool result fed back to Gemini when we intercept a deferred
-    tool call. Tells the model the action is pending user confirmation and
-    must not be retried."""
+    """Synthetic tool result fed back to the model when we intercept a
+    deferred tool call. Tells the model the action is pending user
+    confirmation and must not be retried."""
     summary = ", ".join(f"{k}={v!r}" for k, v in args.items() if k != "body")
     return (
         f"The {tool_name} call has been captured as a draft and is pending user "
@@ -155,6 +143,14 @@ def _deferred_response(tool_name: str, args: dict) -> str:
     )
 
 
+def _parse_args(raw: str | None) -> dict[str, Any] | None:
+    try:
+        args = json.loads(raw or "{}")
+    except json.JSONDecodeError:
+        return None
+    return args if isinstance(args, dict) else None
+
+
 async def chat_once(message: str, mailbox: Mailbox) -> ChatResult:
     """Single-shot chat turn. Returns the model reply plus an optional
     pending action that the frontend must confirm before we actually run it.
@@ -162,29 +158,49 @@ async def chat_once(message: str, mailbox: Mailbox) -> ChatResult:
     One mailbox session (for Gmail: one MCP server process) is kept open for
     the whole turn so multiple tool calls don't each pay the start-up cost."""
     tools = await _get_tools()
+    messages: list[ChatCompletionMessageParam] = [
+        {"role": "system", "content": SYSTEM_INSTRUCTION},
+        {"role": "user", "content": message},
+    ]
+    pending: dict | None = None
+    reply: str | None = None
+
     async with mailbox.session() as session:
-        config = types.GenerateContentConfig(
-            system_instruction=SYSTEM_INSTRUCTION,
-            tools=tools,
-            automatic_function_calling=types.AutomaticFunctionCallingConfig(
-                disable=True
-            ),
-        )
-        chat = _client.aio.chats.create(model=_MODEL, config=config)
-
-        response = await chat.send_message(message)
-        pending: dict | None = None
-
-        for _ in range(_MAX_TOOL_ROUNDS):
-            calls = _function_calls(response)
+        for _ in range(_MAX_TOOL_ROUNDS + 1):
+            completion = await _client.chat.completions.create(
+                model=_MODEL, messages=messages, tools=tools
+            )
+            msg = completion.choices[0].message
+            reply = msg.content
+            calls = [c for c in (msg.tool_calls or []) if c.type == "function"]
             if not calls:
                 break
 
-            tool_responses: list[types.Part] = []
+            # Echo the assistant turn back with only input-valid fields
+            # (a raw model_dump carries output-only keys like annotations).
+            messages.append(
+                {
+                    "role": "assistant",
+                    "content": msg.content,
+                    "tool_calls": [
+                        {
+                            "id": c.id,
+                            "type": "function",
+                            "function": {
+                                "name": c.function.name,
+                                "arguments": c.function.arguments,
+                            },
+                        }
+                        for c in calls
+                    ],
+                }
+            )
             for call in calls:
-                name = call.name or ""
-                args = dict(call.args) if call.args else {}
-                if name in DEFERRED_TOOLS:
+                name = call.function.name
+                args = _parse_args(call.function.arguments)
+                if args is None:
+                    result_text = f"Error: arguments for {name} were not valid JSON."
+                elif name in DEFERRED_TOOLS:
                     pending = {"tool": name, "args": args}
                     result_text = _deferred_response(name, args)
                 else:
@@ -194,18 +210,11 @@ async def chat_once(message: str, mailbox: Mailbox) -> ChatResult:
                         # Feed the failure back so the model can recover
                         # (e.g. bad message id) instead of failing the turn.
                         result_text = f"Error running {name}: {exc}"
-                tool_responses.append(
-                    types.Part.from_function_response(
-                        name=name,
-                        response={"result": result_text},
-                    )
+                messages.append(
+                    {"role": "tool", "tool_call_id": call.id, "content": result_text}
                 )
 
-            response = await chat.send_message(tool_responses)
-
-    text = response.text or (
-        "I prepared the requested actions but didn't produce a text summary."
-    )
+    text = reply or "I prepared the requested actions but didn't produce a text summary."
     return ChatResult(reply=text, pending_action=pending)
 
 
@@ -219,23 +228,25 @@ async def execute_pending(pending: dict, mailbox: Mailbox) -> str:
 
 
 async def suggest_reply(email_text: str, instruction: str | None = None) -> str:
-    """Generate a reply draft for one email. No tool calls — pure text in/out."""
-    tone = (
+    """Generate a reply draft for one email. No tool calls - pure text in/out."""
+    style = (
         f"\nStyle request: {instruction.strip()}"
         if instruction and instruction.strip()
         else ""
     )
-    prompt = (
-        "You are drafting a reply on behalf of the user.\n"
-        "Write ONLY the reply body — no 'Subject:' line, no quoted original.\n"
-        "Match the tone of the sender. Keep it to 2-5 short sentences.\n"
-        "Include a greeting and a short sign-off."
-        + tone
-        + "\n\n--- ORIGINAL EMAIL ---\n"
-        + email_text
-    )
-    response = await _client.aio.models.generate_content(
+    completion = await _client.chat.completions.create(
         model=_MODEL,
-        contents=prompt,
+        messages=[
+            {
+                "role": "system",
+                "content": (
+                    "You draft email replies on behalf of the user.\n"
+                    "Write ONLY the reply body - no 'Subject:' line, no quoted original.\n"
+                    "Match the tone of the sender. Keep it to 2-5 short sentences.\n"
+                    "Include a greeting and a short sign-off." + style
+                ),
+            },
+            {"role": "user", "content": f"--- ORIGINAL EMAIL ---\n{email_text}"},
+        ],
     )
-    return (response.text or "").strip()
+    return (completion.choices[0].message.content or "").strip()

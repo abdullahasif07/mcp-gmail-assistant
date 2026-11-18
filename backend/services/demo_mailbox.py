@@ -2,7 +2,7 @@
 
 Implements the same four tools as the Node MCP server (list / read / send /
 get thread) and returns text in exactly the same format, so the routes,
-parsers and the Gemini tool loop work unchanged - they can't tell a demo
+parsers and the AI tool loop work unchanged - they can't tell a demo
 mailbox from a real Gmail one.
 
 Each demo session gets its own copy of the seed data. "Sent" mail is only

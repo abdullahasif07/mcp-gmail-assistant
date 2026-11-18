@@ -26,7 +26,7 @@ services:
     ports:
       - "8001:8001"
     restart: unless-stopped
-    # Gemini + MCP are initialised at request time, so no deep healthcheck
+    # OpenAI + MCP are initialised at request time, so no deep healthcheck
     # is needed. Root `/` returns {"status":"running"} for a basic ping.
     healthcheck:
       test: ["CMD", "python", "-c", "import urllib.request,sys; sys.exit(0) if urllib.request.urlopen('http://localhost:8001/', timeout=2).status==200 else sys.exit(1)"]

@@ -1,7 +1,7 @@
 from fastapi import APIRouter, Depends
 
 from schemas.ai import SuggestReplyRequest, SuggestReplyResponse
-from services.gemini_service import suggest_reply
+from services.ai_service import suggest_reply
 from services.mailbox import Mailbox, call_tool, current_mailbox
 from services.usage import ai_budget
 

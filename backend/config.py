@@ -37,9 +37,11 @@ class Settings(BaseSettings):
     # friction-free localhost dev.
     env: Literal["dev", "prod"] = "dev"
 
-    # ── Gemini ──────────────────────────────────────────────────────────
-    gemini_api_key: str
-    gemini_model: str = "gemini-2.5-flash"
+    # ── OpenAI ──────────────────────────────────────────────────────────
+    openai_api_key: str
+    # Any Chat Completions model with tool calling works; a small model keeps
+    # a public demo cheap.
+    openai_model: str = "gpt-5-mini"
 
     # ── Google OAuth ────────────────────────────────────────────────────
     google_client_id: str

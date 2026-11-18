@@ -1,7 +1,7 @@
 from fastapi import APIRouter, Depends, HTTPException
 
 from schemas.chat import ChatRequest, ChatResponse, ConfirmResponse, PendingAction
-from services.gemini_service import DEFERRED_TOOLS, chat_once, execute_pending
+from services.ai_service import DEFERRED_TOOLS, chat_once, execute_pending
 from services.mailbox import Mailbox, current_mailbox
 from services.usage import ai_budget
 

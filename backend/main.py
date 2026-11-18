@@ -1,16 +1,16 @@
 import hmac
 import logging
 
+import openai
 from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
-from google.genai import errors as genai_errors
 from mcp import MCPError
 
 from config import settings
 from db import init_db
 from routes import ai, auth, chat, emails
-from services.gemini_service import friendly_gemini_error
+from services.ai_service import friendly_ai_error
 from services.mcp_service import MCPToolError
 
 logger = logging.getLogger("mailmind")
@@ -67,7 +67,7 @@ async def require_api_key(request: Request, call_next):
 
 
 # ── Upstream error mapping ────────────────────────────────────────────────
-# Routes let Gmail (via MCP) and Gemini errors propagate; these handlers turn
+# Routes let Gmail (via MCP) and OpenAI errors propagate; these handlers turn
 # them into clean JSON responses instead of opaque 500s.
 @app.exception_handler(MCPToolError)
 @app.exception_handler(MCPError)
@@ -76,13 +76,13 @@ async def handle_mcp_error(_request: Request, exc: Exception) -> JSONResponse:
     return JSONResponse(status_code=502, content={"detail": f"Gmail request failed: {exc}"})
 
 
-@app.exception_handler(genai_errors.APIError)
-async def handle_gemini_error(_request: Request, exc: genai_errors.APIError) -> JSONResponse:
-    logger.warning("Gemini error: %s", exc)
-    friendly = friendly_gemini_error(exc)
+@app.exception_handler(openai.APIError)
+async def handle_ai_error(_request: Request, exc: openai.APIError) -> JSONResponse:
+    logger.warning("OpenAI error: %s", exc)
+    friendly = friendly_ai_error(exc)
     if friendly:
         return JSONResponse(status_code=503, content={"detail": friendly})
-    return JSONResponse(status_code=502, content={"detail": f"Gemini request failed: {exc.message}"})
+    return JSONResponse(status_code=502, content={"detail": f"AI request failed: {exc.message}"})
 
 
 app.include_router(auth.router, prefix="/auth", tags=["auth"])

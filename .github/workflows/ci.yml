@@ -18,7 +18,7 @@ jobs:
   # ─────────────────────────────────────────────────────────────────
   # Backend: install deps, import every module, unit tests, pip-audit.
   # The imports are the real test here - db.py / auth_session.py /
-  # gemini_service.py all validate required env vars at import time,
+  # ai_service.py all validate required env vars at import time,
   # so a successful import proves the module tree is intact and the
   # config contract hasn't drifted.
   # ─────────────────────────────────────────────────────────────────
@@ -51,7 +51,7 @@ jobs:
         # one on the fly instead of hard-coding garbage.
         env:
           SESSION_JWT_SECRET: ci-dummy-session-secret-not-used-in-prod
-          GEMINI_API_KEY: ci-dummy-gemini-key
+          OPENAI_API_KEY: ci-dummy-openai-key
           GOOGLE_CLIENT_ID: ci-dummy
           GOOGLE_CLIENT_SECRET: ci-dummy
           GOOGLE_REDIRECT_URI: http://localhost/ci
@@ -62,7 +62,7 @@ jobs:
           export TOKEN_ENCRYPTION_KEY=$(python -c "from cryptography.fernet import Fernet; print(Fernet.generate_key().decode())")
           python -c "import main"
           python -c "from routes import ai, auth, chat, emails"
-          python -c "from services import gemini_service, mcp_service"
+          python -c "from services import ai_service, mcp_service"
           python -c "import db, auth_session"
 
       - name: Unit tests

@@ -15,7 +15,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
 _TEST_ENV = {
     "ENV": "dev",
-    "GEMINI_API_KEY": "test-gemini-key",
+    "OPENAI_API_KEY": "test-openai-key",
     "GOOGLE_CLIENT_ID": "test-client-id",
     "GOOGLE_CLIENT_SECRET": "test-client-secret",
     "GOOGLE_REDIRECT_URI": "http://localhost:8001/auth/callback",
